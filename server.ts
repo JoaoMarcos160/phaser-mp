@@ -12,6 +12,9 @@ type Player = {
 const rooms = new Map<string, Map<string, Player>>();
 const TICK = 50;
 const SPEED = 150;
+const WIDTH = 800;
+const HEIGHT = 600;
+const PLAYER_SIZE = 20;
 
 // HTTP server to serve static files
 const httpServer = createServer(async (req, res) => {
@@ -60,9 +63,15 @@ io.on("connection", (socket) => {
 
 setInterval(() => {
   rooms.forEach((players, room) => {
+    const half = PLAYER_SIZE / 2;
     players.forEach((p) => {
       p.x += p.vx * (TICK / 1000);
       p.y += p.vy * (TICK / 1000);
+
+      if (p.x < half) p.x = half;
+      if (p.x > WIDTH - half) p.x = WIDTH - half;
+      if (p.y < half) p.y = half;
+      if (p.y > HEIGHT - half) p.y = HEIGHT - half;
     });
 
     io.to(room).emit("state", [...players.values()]);

@@ -8,20 +8,30 @@
   <body>
     <script>
       const socket = io(window.location.origin, {
-        transports: ["polling"],
+        transports: ["websocket", "polling"],
       });
 
       const players = new Map();
       let scene;
+      let myId = null;
+      let lastDx = 0, lastDy = 0;
+      const SPEED = 150;
+      const WIDTH = 800, HEIGHT = 600, HALF = 10;
 
       socket.on("connect", () => {
+        myId = socket.id;
         socket.emit("join", { room: "room-1" });
       });
+
+      function randomColor() {
+        return Math.floor(Math.random() * 0xffffff);
+      }
 
       socket.on("state", (list) => {
         list.forEach((p) => {
           if (!players.has(p.id)) {
-            const r = scene.add.rectangle(p.x, p.y, 20, 20, 0x00ff00);
+            const color = randomColor();
+            const r = scene.add.rectangle(p.x, p.y, 20, 20, color);
             players.set(p.id, { obj: r, x: p.x, y: p.y });
           }
           const pl = players.get(p.id);
@@ -32,15 +42,15 @@
 
       new Phaser.Game({
         type: Phaser.AUTO,
-        width: 800,
-        height: 600,
+        width: WIDTH,
+        height: HEIGHT,
         backgroundColor: "#1e1e1e",
         scene: {
           create() {
             scene = this;
             this.cursors = this.input.keyboard.createCursorKeys();
           },
-          update() {
+          update(time, delta) {
             let dx = 0,
               dy = 0;
             if (this.cursors.left.isDown) dx = -1;
@@ -48,11 +58,31 @@
             if (this.cursors.up.isDown) dy = -1;
             if (this.cursors.down.isDown) dy = 1;
 
-            socket.emit("move", { dx, dy });
+            // Só envia se mudou (economiza rede)
+            if (dx !== lastDx || dy !== lastDy) {
+              socket.emit("move", { dx, dy });
+              lastDx = dx;
+              lastDy = dy;
+            }
 
-            players.forEach((p) => {
-              p.obj.x += (p.x - p.obj.x) * 0.25;
-              p.obj.y += (p.y - p.obj.y) * 0.25;
+            const dt = delta / 1000;
+            players.forEach((p, id) => {
+              if (id === myId) {
+                // Predição local: move imediatamente
+                p.obj.x += dx * SPEED * dt;
+                p.obj.y += dy * SPEED * dt;
+                // Limita às paredes
+                p.obj.x = Math.max(HALF, Math.min(WIDTH - HALF, p.obj.x));
+                p.obj.y = Math.max(HALF, Math.min(HEIGHT - HALF, p.obj.y));
+                // Corrige suavemente com servidor
+                p.obj.x += (p.x - p.obj.x) * 0.1;
+                p.obj.y += (p.y - p.obj.y) * 0.1;
+              } else {
+                // Outros jogadores: interpolação suave
+                const lerp = Math.min(1, 10 * dt);
+                p.obj.x += (p.x - p.obj.x) * lerp;
+                p.obj.y += (p.y - p.obj.y) * lerp;
+              }
             });
           },
         },
