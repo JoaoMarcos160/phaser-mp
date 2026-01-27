@@ -1,0 +1,139 @@
+type Player = {
+  id: string;
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+};
+
+type WebSocketData = {
+  id: string;
+  room: string | null;
+};
+
+const rooms = new Map<string, Map<string, Player>>();
+const clients = new Map<string, WebSocket>();
+const TICK = 50;
+const SPEED = 150;
+const WIDTH = 800;
+const HEIGHT = 600;
+const PLAYER_SIZE = 20;
+
+let idCounter = 0;
+function generateId(): string {
+  return `player-${++idCounter}-${Date.now().toString(36)}`;
+}
+
+const server = Bun.serve<WebSocketData>({
+  port: process.env.PORT || 3000,
+
+  routes: {
+    "/": async () => {
+      const file = Bun.file("index-bun.html");
+      return new Response(file, {
+        headers: { "Content-Type": "text/html" },
+      });
+    },
+  },
+
+  fetch(req, server) {
+    const url = new URL(req.url);
+
+    // Upgrade WebSocket connection
+    if (url.pathname === "/ws") {
+      const id = generateId();
+      const upgraded = server.upgrade(req, {
+        data: { id, room: null },
+      });
+      if (upgraded) return undefined;
+      return new Response("WebSocket upgrade failed", { status: 400 });
+    }
+
+    return new Response("Not found", { status: 404 });
+  },
+
+  websocket: {
+    open(ws) {
+      clients.set(ws.data.id, ws as unknown as WebSocket);
+      ws.send(JSON.stringify({ type: "connected", id: ws.data.id }));
+    },
+
+    message(ws, message) {
+      try {
+        const data = JSON.parse(message.toString());
+
+        switch (data.type) {
+          case "join": {
+            const room = data.room;
+            ws.data.room = room;
+            ws.subscribe(room);
+
+            if (!rooms.has(room)) {
+              rooms.set(room, new Map());
+            }
+            rooms.get(room)!.set(ws.data.id, {
+              id: ws.data.id,
+              x: 100,
+              y: 100,
+              vx: 0,
+              vy: 0,
+            });
+            break;
+          }
+
+          case "move": {
+            const { dx, dy } = data;
+            rooms.forEach((players) => {
+              const p = players.get(ws.data.id);
+              if (!p) return;
+              p.vx = dx * SPEED;
+              p.vy = dy * SPEED;
+            });
+            break;
+          }
+        }
+      } catch (e) {
+        console.error("Invalid message:", e);
+      }
+    },
+
+    close(ws) {
+      clients.delete(ws.data.id);
+      if (ws.data.room) {
+        ws.unsubscribe(ws.data.room);
+        const roomPlayers = rooms.get(ws.data.room);
+        if (roomPlayers) {
+          roomPlayers.delete(ws.data.id);
+          if (roomPlayers.size === 0) {
+            rooms.delete(ws.data.room);
+          }
+        }
+      }
+    },
+  },
+});
+
+// Game loop - broadcast state to all rooms
+setInterval(() => {
+  rooms.forEach((players, room) => {
+    const half = PLAYER_SIZE / 2;
+    players.forEach((p) => {
+      p.x += p.vx * (TICK / 1000);
+      p.y += p.vy * (TICK / 1000);
+
+      if (p.x < half) p.x = half;
+      if (p.x > WIDTH - half) p.x = WIDTH - half;
+      if (p.y < half) p.y = half;
+      if (p.y > HEIGHT - half) p.y = HEIGHT - half;
+    });
+
+    const state = JSON.stringify({
+      type: "state",
+      players: [...players.values()],
+    });
+
+    server.publish(room, state);
+  });
+}, TICK);
+
+console.log(`listening on :${server.port}`);

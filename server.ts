@@ -1,5 +1,7 @@
 import { Server } from "socket.io";
 import { createServer } from "http";
+import { readFileSync } from "node:fs";
+import { join } from "path";
 
 type Player = {
   id: string;
@@ -17,10 +19,9 @@ const HEIGHT = 600;
 const PLAYER_SIZE = 20;
 
 // HTTP server to serve static files
-const httpServer = createServer(async (req, res) => {
+const httpServer = createServer((req, res) => {
   if (req.url === "/" || req.url === "/index.html") {
-    const file = Bun.file("./index.html");
-    const content = await file.text();
+    const content = readFileSync(join(process.cwd(), "index.html"), "utf-8");
     res.writeHead(200, { "Content-Type": "text/html" });
     res.end(content);
   } else {

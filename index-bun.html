@@ -3,13 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
-    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
   </head>
   <body>
     <script>
-      const socket = io(window.location.origin, {
-        transports: ["polling"],
-      });
+      const protocol = location.protocol === "https:" ? "wss:" : "ws:";
+      const ws = new WebSocket(`${protocol}//${location.host}/ws`);
 
       const players = new Map();
       let scene;
@@ -21,27 +19,41 @@
         HEIGHT = 600,
         HALF = 10;
 
-      socket.on("connect", () => {
-        myId = socket.id;
-        socket.emit("join", { room: "room-1" });
-      });
+      ws.onopen = () => {
+        console.log("WebSocket connected");
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+
+        switch (data.type) {
+          case "connected":
+            myId = data.id;
+            ws.send(JSON.stringify({ type: "join", room: "room-1" }));
+            break;
+
+          case "state":
+            data.players.forEach((p) => {
+              if (!players.has(p.id)) {
+                const color = randomColor();
+                const r = scene.add.rectangle(p.x, p.y, 20, 20, color);
+                players.set(p.id, { obj: r, x: p.x, y: p.y });
+              }
+              const pl = players.get(p.id);
+              pl.x = p.x;
+              pl.y = p.y;
+            });
+            break;
+        }
+      };
+
+      ws.onclose = () => {
+        console.log("WebSocket disconnected");
+      };
 
       function randomColor() {
         return Math.floor(Math.random() * 0xffffff);
       }
-
-      socket.on("state", (list) => {
-        list.forEach((p) => {
-          if (!players.has(p.id)) {
-            const color = randomColor();
-            const r = scene.add.rectangle(p.x, p.y, 20, 20, color);
-            players.set(p.id, { obj: r, x: p.x, y: p.y });
-          }
-          const pl = players.get(p.id);
-          pl.x = p.x;
-          pl.y = p.y;
-        });
-      });
 
       new Phaser.Game({
         type: Phaser.AUTO,
@@ -61,9 +73,8 @@
             if (this.cursors.up.isDown) dy = -1;
             if (this.cursors.down.isDown) dy = 1;
 
-            // Só envia se mudou (economiza rede)
-            if (dx !== lastDx || dy !== lastDy) {
-              socket.emit("move", { dx, dy });
+            if ((dx !== lastDx || dy !== lastDy) && ws.readyState === WebSocket.OPEN) {
+              ws.send(JSON.stringify({ type: "move", dx, dy }));
               lastDx = dx;
               lastDy = dy;
             }
@@ -71,17 +82,13 @@
             const dt = delta / 1000;
             players.forEach((p, id) => {
               if (id === myId) {
-                // Predição local: move imediatamente
                 p.obj.x += dx * SPEED * dt;
                 p.obj.y += dy * SPEED * dt;
-                // Limita às paredes
                 p.obj.x = Math.max(HALF, Math.min(WIDTH - HALF, p.obj.x));
                 p.obj.y = Math.max(HALF, Math.min(HEIGHT - HALF, p.obj.y));
-                // Corrige suavemente com servidor
                 p.obj.x += (p.x - p.obj.x) * 0.1;
                 p.obj.y += (p.y - p.obj.y) * 0.1;
               } else {
-                // Outros jogadores: interpolação suave
                 const lerp = Math.min(1, 10 * dt);
                 p.obj.x += (p.x - p.obj.x) * lerp;
                 p.obj.y += (p.y - p.obj.y) * lerp;
