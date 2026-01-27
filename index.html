@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8" />
+    <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
+    <script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+  </head>
+  <body>
+    <script>
+      const socket = io(window.location.origin, {
+        transports: ["polling"],
+      });
+
+      const players = new Map();
+      let scene;
+
+      socket.on("connect", () => {
+        socket.emit("join", { room: "room-1" });
+      });
+
+      socket.on("state", (list) => {
+        list.forEach((p) => {
+          if (!players.has(p.id)) {
+            const r = scene.add.rectangle(p.x, p.y, 20, 20, 0x00ff00);
+            players.set(p.id, { obj: r, x: p.x, y: p.y });
+          }
+          const pl = players.get(p.id);
+          pl.x = p.x;
+          pl.y = p.y;
+        });
+      });
+
+      new Phaser.Game({
+        type: Phaser.AUTO,
+        width: 800,
+        height: 600,
+        backgroundColor: "#1e1e1e",
+        scene: {
+          create() {
+            scene = this;
+            this.cursors = this.input.keyboard.createCursorKeys();
+          },
+          update() {
+            let dx = 0,
+              dy = 0;
+            if (this.cursors.left.isDown) dx = -1;
+            if (this.cursors.right.isDown) dx = 1;
+            if (this.cursors.up.isDown) dy = -1;
+            if (this.cursors.down.isDown) dy = 1;
+
+            socket.emit("move", { dx, dy });
+
+            players.forEach((p) => {
+              p.obj.x += (p.x - p.obj.x) * 0.25;
+              p.obj.y += (p.y - p.obj.y) * 0.25;
+            });
+          },
+        },
+      });
+    </script>
+  </body>
+</html>

@@ -1,0 +1,13 @@
+{
+  "name": "phaser-mp",
+  "private": true,
+  "devDependencies": {
+    "@types/bun": "latest"
+  },
+  "peerDependencies": {
+    "typescript": "^5"
+  },
+  "dependencies": {
+    "socket.io": "^4.8.3"
+  }
+}
