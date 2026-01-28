@@ -12,7 +12,9 @@ type Player = {
 };
 
 const rooms = new Map<string, Map<string, Player>>();
-const TICK = 50;
+const TICK_RATE = 20; // ticks per second
+const FIXED_DT_MS = 1000 / TICK_RATE; // fixed timestep per simulation step (ms)
+const MAX_ACCUM_MS = 250; // clamp max accumulated delta to avoid spiral of death
 const SPEED = 150;
 const WIDTH = 800;
 const HEIGHT = 600;
@@ -62,22 +64,48 @@ io.on("connection", (socket) => {
   });
 });
 
-setInterval(() => {
-  rooms.forEach((players, room) => {
-    const half = PLAYER_SIZE / 2;
-    players.forEach((p) => {
-      p.x += p.vx * (TICK / 1000);
-      p.y += p.vy * (TICK / 1000);
+// Fixed timestep loop with accumulator and emission at tick rate
+let lastTime = Date.now();
+let accum = 0;
+let emitAccum = 0;
 
-      if (p.x < half) p.x = half;
-      if (p.x > WIDTH - half) p.x = WIDTH - half;
-      if (p.y < half) p.y = half;
-      if (p.y > HEIGHT - half) p.y = HEIGHT - half;
+setInterval(() => {
+  const now = Date.now();
+  let delta = now - lastTime;
+  lastTime = now;
+
+  // clamp large deltas (e.g., when paused or slow host)
+  if (delta > MAX_ACCUM_MS) delta = MAX_ACCUM_MS;
+
+  accum += delta;
+  emitAccum += delta;
+
+  // perform fixed-step simulation updates
+  while (accum >= FIXED_DT_MS) {
+    rooms.forEach((players) => {
+      const half = PLAYER_SIZE / 2;
+      players.forEach((p) => {
+        p.x += p.vx * (FIXED_DT_MS / 1000);
+        p.y += p.vy * (FIXED_DT_MS / 1000);
+
+        if (p.x < half) p.x = half;
+        if (p.x > WIDTH - half) p.x = WIDTH - half;
+        if (p.y < half) p.y = half;
+        if (p.y > HEIGHT - half) p.y = HEIGHT - half;
+      });
     });
 
-    io.to(room).emit("state", [...players.values()]);
-  });
-}, TICK);
+    accum -= FIXED_DT_MS;
+  }
+
+  // emit state at tick rate
+  if (emitAccum >= FIXED_DT_MS) {
+    rooms.forEach((players, room) => {
+      io.to(room).emit("state", [...players.values()]);
+    });
+    emitAccum = emitAccum % FIXED_DT_MS;
+  }
+}, 1000 / 60);
 
 const PORT = process.env.PORT || 3000;
 httpServer.listen(PORT, () => {

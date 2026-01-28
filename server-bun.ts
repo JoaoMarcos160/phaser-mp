@@ -13,7 +13,9 @@ type WebSocketData = {
 
 const rooms = new Map<string, Map<string, Player>>();
 const clients = new Map<string, WebSocket>();
-const TICK = 50;
+const TICK_RATE = 20; // ticks per second
+const FIXED_DT_MS = 1000 / TICK_RATE; // ms per simulation step
+const MAX_ACCUM_MS = 250; // clamp maximum delta
 const SPEED = 150;
 const WIDTH = 800;
 const HEIGHT = 600;
@@ -113,27 +115,48 @@ const server = Bun.serve<WebSocketData>({
   },
 });
 
-// Game loop - broadcast state to all rooms
+// Game loop - fixed timestep with accumulator and clamped delta
+let lastTime = Date.now();
+let accum = 0;
+let emitAccum = 0;
+
 setInterval(() => {
-  rooms.forEach((players, room) => {
-    const half = PLAYER_SIZE / 2;
-    players.forEach((p) => {
-      p.x += p.vx * (TICK / 1000);
-      p.y += p.vy * (TICK / 1000);
+  const now = Date.now();
+  let delta = now - lastTime;
+  lastTime = now;
 
-      if (p.x < half) p.x = half;
-      if (p.x > WIDTH - half) p.x = WIDTH - half;
-      if (p.y < half) p.y = half;
-      if (p.y > HEIGHT - half) p.y = HEIGHT - half;
+  if (delta > MAX_ACCUM_MS) delta = MAX_ACCUM_MS;
+
+  accum += delta;
+  emitAccum += delta;
+
+  while (accum >= FIXED_DT_MS) {
+    rooms.forEach((players) => {
+      const half = PLAYER_SIZE / 2;
+      players.forEach((p) => {
+        p.x += p.vx * (FIXED_DT_MS / 1000);
+        p.y += p.vy * (FIXED_DT_MS / 1000);
+
+        if (p.x < half) p.x = half;
+        if (p.x > WIDTH - half) p.x = WIDTH - half;
+        if (p.y < half) p.y = half;
+        if (p.y > HEIGHT - half) p.y = HEIGHT - half;
+      });
     });
 
-    const state = JSON.stringify({
-      type: "state",
-      players: [...players.values()],
-    });
+    accum -= FIXED_DT_MS;
+  }
 
-    server.publish(room, state);
-  });
-}, TICK);
+  if (emitAccum >= FIXED_DT_MS) {
+    rooms.forEach((players, room) => {
+      const state = JSON.stringify({
+        type: "state",
+        players: [...players.values()],
+      });
+      server.publish(room, state);
+    });
+    emitAccum = emitAccum % FIXED_DT_MS;
+  }
+}, 1000 / 60);
 
 console.log(`listening on :${server.port}`);
