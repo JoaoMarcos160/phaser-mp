@@ -1,17 +1,17 @@
 services:
-  app-node:
-    build:
-      dockerfile: Dockerfile.node
-    ports:
-      - "3000:3000"
-    environment:
-      - PORT=3000
-    restart: unless-stopped
+  # app-node:
+  #   build:
+  #     dockerfile: Dockerfile.node
+  #   ports:
+  #     - "3001:3000"
+  #   environment:
+  #     - PORT=3000
+  #   restart: unless-stopped
   app-bun:
     build:
       dockerfile: Dockerfile
     ports:
-      - "3001:3000"
+      - "3000:3000"
     environment:
       - PORT=3000
     restart: unless-stopped

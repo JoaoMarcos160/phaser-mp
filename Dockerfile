@@ -10,8 +10,11 @@ RUN bun install --frozen-lockfile --production
 FROM base AS release
 COPY --from=install /app/node_modules ./node_modules
 COPY server-bun.ts index-bun.html ./
+COPY mapa_redimensionado.jpg ./
+COPY gameScene.js ./
+COPY favicon.ico ./
 
 USER bun
 EXPOSE 3000
 
-CMD ["bun", "run", "server-bun.ts"]
+CMD ["bun", "server-bun.ts"]

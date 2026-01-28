@@ -20,15 +20,28 @@ const WIDTH = 800;
 const HEIGHT = 600;
 const PLAYER_SIZE = 20;
 
-// HTTP server to serve static files
+// HTTP server to serve index and the map image
 const httpServer = createServer((req, res) => {
-  if (req.url === "/" || req.url === "/index.html") {
-    const content = readFileSync(join(process.cwd(), "index.html"), "utf-8");
-    res.writeHead(200, { "Content-Type": "text/html" });
-    res.end(content);
-  } else {
+  try {
+    if (req.url === "/" || req.url === "/index.html") {
+      const content = readFileSync(join(process.cwd(), "index.html"), "utf-8");
+      res.writeHead(200, { "Content-Type": "text/html" });
+      res.end(content);
+      return;
+    }
+
+    if (req.url === "/mapa_redimensionado.jpg") {
+      const img = readFileSync(join(process.cwd(), "mapa_redimensionado.jpg"));
+      res.writeHead(200, { "Content-Type": "image/jpeg" });
+      res.end(img);
+      return;
+    }
+
     res.writeHead(404);
     res.end("Not found");
+  } catch (e) {
+    res.writeHead(500);
+    res.end("Server error");
   }
 });
 

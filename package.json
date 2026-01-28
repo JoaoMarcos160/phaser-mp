@@ -8,6 +8,7 @@
     "typescript": "^5"
   },
   "dependencies": {
+    "image-size": "^2.0.2",
     "socket.io": "^4.8.3"
   }
 }

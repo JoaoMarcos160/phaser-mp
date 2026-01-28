@@ -1,3 +1,5 @@
+import sizeOf from "image-size";
+
 type Player = {
   id: string;
   x: number;
@@ -17,8 +19,11 @@ const TICK_RATE = 20; // ticks per second
 const FIXED_DT_MS = 1000 / TICK_RATE; // ms per simulation step
 const MAX_ACCUM_MS = 250; // clamp maximum delta
 const SPEED = 150;
-const WIDTH = 800;
-const HEIGHT = 600;
+
+//Map dimensions
+const mapPath = "mapa_redimensionado.jpg";
+const mapBuffer = await Bun.file(mapPath).arrayBuffer();
+const { width: WIDTH, height: HEIGHT } = sizeOf(new Uint8Array(mapBuffer));
 const PLAYER_SIZE = 20;
 
 let idCounter = 0;
@@ -37,7 +42,6 @@ const server = Bun.serve<WebSocketData>({
       });
     },
   },
-
   fetch(req, server) {
     const url = new URL(req.url);
 
@@ -51,7 +55,32 @@ const server = Bun.serve<WebSocketData>({
       return new Response("WebSocket upgrade failed", { status: 400 });
     }
 
-    return new Response("Not found", { status: 404 });
+    // Serve static files (simple)
+    const pathname = url.pathname === "/" ? "/index-bun.html" : url.pathname;
+    const filePath = pathname.slice(1);
+    try {
+      const file = Bun.file(filePath);
+      const ext = filePath.split(".").pop()?.toLowerCase();
+      const ct = (() => {
+        switch (ext) {
+          case "jpg":
+          case "jpeg":
+            return "image/jpeg";
+          case "png":
+            return "image/png";
+          case "js":
+            return "application/javascript";
+          case "html":
+            return "text/html";
+          default:
+            return "application/octet-stream";
+        }
+      })();
+      return new Response(file, { headers: { "Content-Type": ct } });
+    } catch (e) {
+      console.error(`404: ${filePath}`);
+      return new Response("Not found", { status: 404 });
+    }
   },
 
   websocket: {

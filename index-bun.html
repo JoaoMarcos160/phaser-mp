@@ -7,141 +7,70 @@
 </head>
 
 <body>
-  <script>
+  <script type="module">
+    import GameScene from './gameScene.js';
+
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    const ws = new WebSocket(`${protocol}//${location.host}/ws`);
+    window.ws = new WebSocket(`${protocol}//${location.host}/ws`);
 
-    const players = new Map();
-    let scene;
-    let myId = null;
-    let lastDx = 0,
-      lastDy = 0;
-    const SPEED = 150;
-    const WIDTH = 800,
-      HEIGHT = 600,
-      HALF = 10;
-    // Client-side interpolation settings
-    const TICK_RATE = 20; // expected server tick rate (hz)
-    const FIXED_DT_MS = 1000 / TICK_RATE;
-    const RENDER_DELAY_MS = Math.max(100, FIXED_DT_MS * 2); // render behind server by this amount to allow interpolation
+    window.players = new Map();
+    window.myId = null;
+    window.lastDx = 0;
+    window.lastDy = 0;
+    window.SPEED = 150;
+    window.RENDER_DELAY_MS = 100;
 
-    ws.onopen = () => {
+    window.ws.onopen = () => {
       console.log("WebSocket connected");
     };
 
-    ws.onmessage = (event) => {
+    window.ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
 
       switch (data.type) {
         case "connected":
-          myId = data.id;
-          ws.send(JSON.stringify({ type: "join", room: "room-1" }));
+          window.myId = data.id;
+          window.ws.send(JSON.stringify({ type: "join", room: "room-1" }));
           break;
 
-        case "state":
+        case "state": {
           const now = Date.now();
           data.players.forEach((p) => {
-            if (!players.has(p.id)) {
-              const color = randomColor();
-              const r = scene.add.rectangle(p.x, p.y, 20, 20, color);
-              // store prev and curr states with timestamps for interpolation
-              players.set(p.id, {
-                obj: r,
-                prev: { x: p.x, y: p.y, t: now - FIXED_DT_MS },
+            if (!window.players.has(p.id)) {
+              window.players.set(p.id, {
+                prev: { x: p.x, y: p.y, t: now - 50 },
                 curr: { x: p.x, y: p.y, t: now },
               });
               return;
             }
 
-            const pl = players.get(p.id);
-            // shift current to previous and set new current timestamped
+            const pl = window.players.get(p.id);
             pl.prev = pl.curr;
             pl.curr = { x: p.x, y: p.y, t: now };
           });
           break;
+        }
       }
     };
 
-    ws.onclose = () => {
+    window.ws.onclose = () => {
       console.log("WebSocket disconnected");
     };
 
-    function randomColor() {
-      return Math.floor(Math.random() * 0xffffff);
-    }
+    const mapImage = new Image();
+    mapImage.src = 'mapa_redimensionado.jpg';
+    mapImage.onload = () => {
+      const MAP_WIDTH = mapImage.width;
+      const MAP_HEIGHT = mapImage.height;
 
-    new Phaser.Game({
-      type: Phaser.AUTO,
-      width: WIDTH,
-      height: HEIGHT,
-      backgroundColor: "#1e1e1e",
-      scene: {
-        create() {
-          scene = this;
-          this.cursors = this.input.keyboard.createCursorKeys();
-        },
-        update(time, delta) {
-          let dx = 0,
-            dy = 0;
-          if (this.cursors.left.isDown) dx = -1;
-          if (this.cursors.right.isDown) dx = 1;
-          if (this.cursors.up.isDown) dy = -1;
-          if (this.cursors.down.isDown) dy = 1;
-
-          if ((dx !== lastDx || dy !== lastDy) && ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "move", dx, dy }));
-            lastDx = dx;
-            lastDy = dy;
-          }
-
-          const dt = delta / 1000;
-          const renderTimestamp = Date.now() - RENDER_DELAY_MS;
-
-          players.forEach((p, id) => {
-
-            if (!p || !p.obj) return;
-
-            if (id === myId) {
-
-              p.obj.x += dx * SPEED * dt;
-              p.obj.y += dy * SPEED * dt;
-              p.obj.x = Math.max(HALF, Math.min(WIDTH - HALF, p.obj.x));
-              p.obj.y = Math.max(HALF, Math.min(HEIGHT - HALF, p.obj.y));
-
-
-              if (p.curr) {
-                const targetX = p.curr.x;
-                const targetY = p.curr.y;
-                p.obj.x += (targetX - p.obj.x) * 0.08;
-                p.obj.y += (targetY - p.obj.y) * 0.08;
-              }
-              return;
-            }
-
-
-            if (!p.prev || !p.curr) return;
-
-            const prev = p.prev;
-            const curr = p.curr;
-
-            if (renderTimestamp >= prev.t && renderTimestamp <= curr.t) {
-              const alpha = (renderTimestamp - prev.t) / (curr.t - prev.t || 1);
-              p.obj.x = prev.x + (curr.x - prev.x) * alpha;
-              p.obj.y = prev.y + (curr.y - prev.y) * alpha;
-            } else if (renderTimestamp > curr.t) {
-              const dtMs = Math.min(renderTimestamp - curr.t, 200);
-              const vx = (curr.x - prev.x) / (curr.t - prev.t || 1);
-              const vy = (curr.y - prev.y) / (curr.t - prev.t || 1);
-              p.obj.x = curr.x + vx * dtMs;
-              p.obj.y = curr.y + vy * dtMs;
-            } else {
-              p.obj.x = prev.x;
-              p.obj.y = prev.y;
-            }
-          });
-        },
-      },
-    });
+      new Phaser.Game({
+        type: Phaser.AUTO,
+        width: '80%',
+        height: '80%',
+        backgroundColor: "#1e1e1e",
+        scene: [GameScene],
+      });
+    };
   </script>
 </body>
 
