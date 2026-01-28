@@ -14,7 +14,6 @@ type WebSocketData = {
 };
 
 const rooms = new Map<string, Map<string, Player>>();
-const clients = new Map<string, WebSocket>();
 const TICK_RATE = 20; // ticks per second
 const FIXED_DT_MS = 1000 / TICK_RATE; // ms per simulation step
 const MAX_ACCUM_MS = 250; // clamp maximum delta
@@ -77,15 +76,14 @@ const server = Bun.serve<WebSocketData>({
         }
       })();
       return new Response(file, { headers: { "Content-Type": ct } });
-    } catch (e) {
-      console.error(`404: ${filePath}`);
+    } catch (error) {
+      console.error(`404: ${filePath}`, error);
       return new Response("Not found", { status: 404 });
     }
   },
 
   websocket: {
     open(ws) {
-      clients.set(ws.data.id, ws as unknown as WebSocket);
       ws.send(JSON.stringify({ type: "connected", id: ws.data.id }));
     },
 
@@ -95,6 +93,9 @@ const server = Bun.serve<WebSocketData>({
 
         switch (data.type) {
           case "join": {
+            const INITIAL_POSITION_X = 1500;
+            const INITIAL_POSITION_Y = 900;
+
             const room = data.room;
             ws.data.room = room;
             ws.subscribe(room);
@@ -104,8 +105,8 @@ const server = Bun.serve<WebSocketData>({
             }
             rooms.get(room)!.set(ws.data.id, {
               id: ws.data.id,
-              x: 100,
-              y: 100,
+              x: INITIAL_POSITION_X,
+              y: INITIAL_POSITION_Y,
               vx: 0,
               vy: 0,
             });
@@ -123,13 +124,12 @@ const server = Bun.serve<WebSocketData>({
             break;
           }
         }
-      } catch (e) {
-        console.error("Invalid message:", e);
+      } catch (error) {
+        console.error("Invalid message:", error);
       }
     },
 
     close(ws) {
-      clients.delete(ws.data.id);
       if (ws.data.room) {
         ws.unsubscribe(ws.data.room);
         const roomPlayers = rooms.get(ws.data.room);

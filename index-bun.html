@@ -1,7 +1,8 @@
 <!DOCTYPE html>
-<html>
+<html lang="pt-BR">
 
 <head>
+  <title>Phaser Multiplayer</title>
   <meta charset="utf-8" />
   <script src="https://cdn.jsdelivr.net/npm/phaser@3/dist/phaser.min.js"></script>
 </head>
@@ -11,40 +12,40 @@
     import GameScene from './gameScene.js';
 
     const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-    window.ws = new WebSocket(`${protocol}//${location.host}/ws`);
+    globalThis.ws = new WebSocket(`${protocol}//${location.host}/ws`);
 
-    window.players = new Map();
-    window.myId = null;
-    window.lastDx = 0;
-    window.lastDy = 0;
-    window.SPEED = 150;
-    window.RENDER_DELAY_MS = 100;
+    globalThis.players = new Map();
+    globalThis.myId = null;
+    globalThis.lastDx = 0;
+    globalThis.lastDy = 0;
+    globalThis.SPEED = 150;
+    globalThis.RENDER_DELAY_MS = 100;
 
-    window.ws.onopen = () => {
+    globalThis.ws.onopen = () => {
       console.log("WebSocket connected");
     };
 
-    window.ws.onmessage = (event) => {
+    globalThis.ws.onmessage = (event) => {
       const data = JSON.parse(event.data);
 
       switch (data.type) {
         case "connected":
-          window.myId = data.id;
-          window.ws.send(JSON.stringify({ type: "join", room: "room-1" }));
+          globalThis.myId = data.id;
+          globalThis.ws.send(JSON.stringify({ type: "join", room: "room-1" }));
           break;
 
         case "state": {
           const now = Date.now();
           data.players.forEach((p) => {
-            if (!window.players.has(p.id)) {
-              window.players.set(p.id, {
+            if (!globalThis.players.has(p.id)) {
+              globalThis.players.set(p.id, {
                 prev: { x: p.x, y: p.y, t: now - 50 },
                 curr: { x: p.x, y: p.y, t: now },
               });
               return;
             }
 
-            const pl = window.players.get(p.id);
+            const pl = globalThis.players.get(p.id);
             pl.prev = pl.curr;
             pl.curr = { x: p.x, y: p.y, t: now };
           });
@@ -53,20 +54,18 @@
       }
     };
 
-    window.ws.onclose = () => {
+    globalThis.ws.onclose = () => {
       console.log("WebSocket disconnected");
     };
 
     const mapImage = new Image();
     mapImage.src = 'mapa_redimensionado.jpg';
     mapImage.onload = () => {
-      const MAP_WIDTH = mapImage.width;
-      const MAP_HEIGHT = mapImage.height;
-
-      new Phaser.Game({
+      globalThis.game = new Phaser.Game({
         type: Phaser.AUTO,
-        width: '80%',
-        height: '80%',
+        width: globalThis.innerWidth - 20,
+        height: globalThis.innerHeight - 20,
+        center: true,
         backgroundColor: "#1e1e1e",
         scene: [GameScene],
       });
